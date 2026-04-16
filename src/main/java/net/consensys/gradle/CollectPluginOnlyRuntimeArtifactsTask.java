@@ -119,8 +119,7 @@ public abstract class CollectPluginOnlyRuntimeArtifactsTask extends DefaultTask 
       List<BesuProvidedDependency> besuProvidedDependencies, ResolvedDependency dependency) {
     String coordinate = dependency.getModuleGroup() + ":" + dependency.getModuleName();
 
-    if (dependency.getModuleGroup() != null
-        && dependency.getModuleGroup().startsWith("org.jetbrains.kotlin")) {
+    if ("org.jetbrains.kotlin".equals(dependency.getModuleGroup())) {
       getLogger().lifecycle("Excluding Kotlin dependency provided by Besu runtime {}", dependency);
       return true;
     }
