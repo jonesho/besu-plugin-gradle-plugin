@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.xml.parsers.ParserConfigurationException;
 
 import groovy.json.JsonSlurper;
@@ -91,17 +92,27 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
 
           // Lazy dependency injection: parse BOM + catalog only when a configuration
           // actually resolves (execution phase), not during afterEvaluate.
-          AtomicBoolean resolved = new AtomicBoolean(false);
-          List<Dependency> mergedDeps = new ArrayList<>();
-          Map<String, String> managedVersionsByCoordinates = new HashMap<>();
+          AtomicBoolean initialized = new AtomicBoolean(false);
+          Object resolutionLock = new Object();
+          AtomicReference<List<Dependency>> mergedDepsRef = new AtomicReference<>(List.of());
+          AtomicReference<Map<String, String>> managedVersionsByCoordinatesRef =
+              new AtomicReference<>(Map.of());
           Runnable ensureResolved =
               () -> {
-                if (resolved.compareAndSet(false, true)) {
+                if (initialized.get()) {
+                  return;
+                }
+                synchronized (resolutionLock) {
+                  if (initialized.get()) {
+                    return;
+                  }
                   String besuVersion = requireBesuVersion(besuVersionProvider);
                   List<Dependency> bomDeps = resolveBomDependencies(project, besuVersion);
                   List<BesuProvidedDependency> catalogDeps =
                       resolveCatalogDependencies(project, besuVersion);
-                  mergedDeps.addAll(mergeDependencies(bomDeps, catalogDeps));
+
+                  List<Dependency> mergedDeps = mergeDependencies(bomDeps, catalogDeps);
+                  Map<String, String> managedVersionsByCoordinates = new HashMap<>();
                   for (Dependency dep : mergedDeps) {
                     String managedVersion = dep.getVersion();
                     if (dep instanceof ExternalModuleDependency extDep) {
@@ -122,6 +133,9 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
                       .getExtraProperties()
                       .set(BESU_PROVIDED_DEPENDENCIES, List.copyOf(catalogDeps));
                   project.getExtensions().getExtraProperties().set("besuVersion", besuVersion);
+                  mergedDepsRef.set(List.copyOf(mergedDeps));
+                  managedVersionsByCoordinatesRef.set(Map.copyOf(managedVersionsByCoordinates));
+                  initialized.set(true);
                 }
               };
 
@@ -157,7 +171,7 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
                 .withDependencies(
                     (DependencySet deps) -> {
                       ensureResolved.run();
-                      for (Dependency dep : mergedDeps) {
+                      for (Dependency dep : mergedDepsRef.get()) {
                         deps.add(dep);
                       }
                     });
@@ -177,7 +191,7 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
                                 ensureResolved.run();
                                 String key =
                                     details.getRequested().getGroup() + ":" + details.getRequested().getName();
-                                String managedVersion = managedVersionsByCoordinates.get(key);
+                                String managedVersion = managedVersionsByCoordinatesRef.get().get(key);
                                 if (managedVersion != null && !managedVersion.isBlank()) {
                                   details.useVersion(managedVersion);
                                 }
@@ -189,7 +203,7 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
               .withDependencies(
                   (DependencySet deps) -> {
                     ensureResolved.run();
-                    for (Dependency dep : mergedDeps) {
+                    for (Dependency dep : mergedDepsRef.get()) {
                       if (ANNOTATION_PROCESSOR_DEPENDENCIES.contains(
                           dep.getGroup() + ":" + dep.getName())) {
                         deps.add(dep);
