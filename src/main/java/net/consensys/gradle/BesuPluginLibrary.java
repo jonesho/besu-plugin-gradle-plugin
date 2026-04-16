@@ -357,9 +357,6 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
     ArrayList json = (ArrayList) new JsonSlurper().parseText(besuDependencyCatalog);
     for (Object o : json) {
       Map<String, String> dependency = (Map<String, String>) o;
-      if (shouldIgnoreBesuManagedDependency(dependency.get("group"), dependency.get("name"))) {
-        continue;
-      }
       besuProvidedDependencies.add(
           new BesuProvidedDependency(
               project
@@ -402,9 +399,6 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
         var artifactId = depElement.getElementsByTagName("artifactId").item(0).getTextContent();
         var version = depElement.getElementsByTagName("version").item(0).getTextContent();
         var classifierElement = depElement.getElementsByTagName("classifier");
-        if (shouldIgnoreBesuManagedDependency(groupId, artifactId)) {
-          continue;
-        }
 
         bomDependencies.add(
             project
@@ -479,10 +473,6 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
 
   private boolean isOldCoordinate(String group, String module) {
     return BesuOld2NewCoordinatesMapping.getOld2NewCoordinates().containsKey(group + ":" + module);
-  }
-
-  private boolean shouldIgnoreBesuManagedDependency(String group, String name) {
-    return "org.jetbrains.kotlin".equals(group);
   }
 
   private Element getElement(Node node, String name) {
