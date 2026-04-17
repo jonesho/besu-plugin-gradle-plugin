@@ -207,15 +207,20 @@ public abstract class BesuPluginLibrary implements Plugin<Project> {
                       cfg.getResolutionStrategy()
                           .eachDependency(
                               details -> {
-                                if (details.getRequested().getVersion() != null
-                                    && !details.getRequested().getVersion().isBlank()) {
-                                  return;
-                                }
                                 ensureResolved.run();
                                 String key =
                                     details.getRequested().getGroup() + ":" + details.getRequested().getName();
                                 String managedVersion = managedVersionsByCoordinatesRef.get().get(key);
-                                if (managedVersion != null && !managedVersion.isBlank()) {
+                                boolean isBesuCoordinate =
+                                    "org.hyperledger.besu".equals(details.getRequested().getGroup())
+                                        || "org.hyperledger.besu.internal"
+                                            .equals(details.getRequested().getGroup());
+                                boolean hasRequestedVersion =
+                                    details.getRequested().getVersion() != null
+                                        && !details.getRequested().getVersion().isBlank();
+                                if (managedVersion != null
+                                    && !managedVersion.isBlank()
+                                    && (!hasRequestedVersion || isBesuCoordinate)) {
                                   details.useVersion(managedVersion);
                                 }
                               }));
